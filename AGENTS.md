@@ -24,19 +24,31 @@ Read the closest existing implementation before adding a new one. Prefer the nar
 
 ## Required Rules
 
-- Preserve unrelated worktree changes and keep patches focused.
-- A build must export exactly one board factory through `DECLARE_BOARD(...)`.
-- Never alter an existing board's pins to support different hardware. Add a uniquely named board or release variant; board identity affects OTA compatibility.
-- Core code depends on `Board` interfaces, never a concrete board class or board `config.h`.
-- Treat camera, backlight, display, LED, battery, and similar capabilities as optional.
-- Change runtime state through `Application::SetDeviceState()` and the state machine.
-- Callbacks may run outside the main task. Schedule application mutations with `Application::Schedule()` or event bits.
-- Do not block the main event loop or audio tasks. Avoid unbounded queues and repeated large allocations in audio paths.
-- Keep shared message semantics in `Protocol`; verify both transports when changing its contract.
-- Validate network input and preserve `cJSON` ownership. NVS keys are persistent API and require migration when changed.
-- Guard target-specific features with Kconfig/component rules. Do not assume every target has PSRAM or S3/P4 resources.
-- Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/`, `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
-- Format only touched C/C++ files with the repository `.clang-format`; avoid unrelated mass formatting.
+Preserve unrelated worktree changes and keep patches focused.
+
+A build must export exactly one board factory through `DECLARE_BOARD(...)`.
+
+Never alter an existing board's pins to support different hardware. Add a uniquely named board or release variant; board identity affects OTA compatibility.
+
+Core code depends on `Board` interfaces, never a concrete board class or board `config.h`.
+
+Treat camera, backlight, display, LED, battery, and similar capabilities as optional.
+
+Change runtime state through `Application::SetDeviceState()` and the state machine.
+
+Callbacks may run outside the main task. Schedule application mutations with `Application::Schedule()` or event bits.
+
+Do not block the main event loop or audio tasks. Avoid unbounded queues and repeated large allocations in audio paths.
+
+Keep shared message semantics in `Protocol`; verify both transports when changing its contract.
+
+Validate network input and preserve `cJSON` ownership. NVS keys are persistent API and require migration when changed.
+
+Guard target-specific features with Kconfig/component rules. Do not assume every target has PSRAM or S3/P4 resources.
+
+Do not manually edit generated/vendor output: `build/`, `releases/`, `managed_components/`, `components/`, `sdkconfig*`, `main/assets/lang_config.h`, or generated mmap headers.
+
+Format only touched C/C++ files with the repository `.clang-format`; avoid unrelated mass formatting.
 
 ## Boards and Configuration
 
