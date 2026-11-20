@@ -35,7 +35,7 @@ config CUSTOM_ASSETS_FILE
 
 choice
     prompt "Default Language"
-    default LANGUAGE_ZH_CN
+    default LANGUAGE_VI_VN
     help
         Select device display language
 
@@ -970,6 +970,12 @@ config USE_AUDIO_DEBUGGER
     default n
     help
         Enable audio debugger, send audio data through UDP to the host machine
+
+config AUDIO_SERIAL_STREAM
+    bool "Stream Audio over Serial Type-C"
+    default n
+    help
+        Stream raw 16kHz PCM audio frames over USB Serial (Type-C) for desktop verification.
 
 menu "WiFi Configuration Method"
     help
