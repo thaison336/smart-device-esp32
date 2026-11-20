@@ -17,24 +17,18 @@ AudioDebugger::AudioDebugger() {
 #if CONFIG_USE_AUDIO_DEBUGGER
     udp_sockfd_ = socket(AF_INET, SOCK_DGRAM, 0);
     if (udp_sockfd_ >= 0) {
-        std::string server_addr = CONFIG_AUDIO_DEBUG_UDP_SERVER;
-        size_t colon_pos = server_addr.find(':');
-
-        if (colon_pos != std::string::npos) {
-            std::string ip = server_addr.substr(0, colon_pos);
-            int port = std::stoi(server_addr.substr(colon_pos + 1));
-
-            memset(&udp_server_addr_, 0, sizeof(udp_server_addr_));
-            udp_server_addr_.sin_family = AF_INET;
-            udp_server_addr_.sin_port = htons(port);
-            inet_pton(AF_INET, ip.c_str(), &udp_server_addr_.sin_addr);
-
-            ESP_LOGI(TAG, "Initialized server address: %s", CONFIG_AUDIO_DEBUG_UDP_SERVER);
-        } else {
-            ESP_LOGW(TAG, "Invalid server address: %s, should be IP:PORT", CONFIG_AUDIO_DEBUG_UDP_SERVER);
-            close(udp_sockfd_);
-            udp_sockfd_ = -1;
+        int broadcast_enabled = 1;
+        if (setsockopt(udp_sockfd_, SOL_SOCKET, SO_BROADCAST,
+                       &broadcast_enabled, sizeof(broadcast_enabled)) != 0) {
+            ESP_LOGW(TAG, "Failed to enable UDP broadcast: %d", errno);
         }
+
+        memset(&udp_server_addr_, 0, sizeof(udp_server_addr_));
+        udp_server_addr_.sin_family = AF_INET;
+        udp_server_addr_.sin_port = htons(8000);
+        udp_server_addr_.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+
+        ESP_LOGI(TAG, "Initialized UDP broadcast address: 255.255.255.255:8000");
     } else {
         ESP_LOGW(TAG, "Failed to create UDP socket: %d", errno);
     }
@@ -56,9 +50,9 @@ void AudioDebugger::Feed(const std::vector<int16_t>& data) {
         ssize_t sent = sendto(udp_sockfd_, data.data(), data.size() * sizeof(int16_t), 0,
             reinterpret_cast<struct sockaddr*>(&udp_server_addr_), sizeof(udp_server_addr_));
         if (sent < 0) {
-            ESP_LOGW(TAG, "Failed to send audio data to %s: %d", CONFIG_AUDIO_DEBUG_UDP_SERVER, errno);
+            ESP_LOGW(TAG, "Failed to send audio broadcast: %d", errno);
         } else {
-            ESP_LOGD(TAG, "Sent %d bytes audio data to %s", sent, CONFIG_AUDIO_DEBUG_UDP_SERVER);
+            ESP_LOGD(TAG, "Sent %d bytes audio broadcast", sent);
         }
     }
 #endif
