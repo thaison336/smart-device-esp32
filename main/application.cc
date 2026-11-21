@@ -5,6 +5,10 @@
 #include "board.h"
 #include "display.h"
 #include "mcp_server.h"
+#include "stm32_bridge/stm32_mcp_tools.h"
+#include "stm32_bridge/stm32_bridge_manager.h"
+#include "stm32_bridge/transport/mock_bus.h"
+#include "stm32_bridge/transport/uart_bus.h"
 #include "mqtt_protocol.h"
 #include "settings.h"
 #include "system_info.h"
@@ -102,6 +106,12 @@ void Application::Initialize() {
     auto& mcp_server = McpServer::GetInstance();
     mcp_server.AddCommonTools();
     mcp_server.AddUserOnlyTools();
+    Stm32McpTools::RegisterTools(mcp_server);
+
+    // Initialize and start STM32 Bridge
+    // Mặc định sử dụng UartTransportBus (chạy trực tiếp trên cổng Type-C USB_SERIAL_JTAG VID:PID=303A:1001)
+    auto uart_bus = std::make_shared<UartTransportBus>(true);
+    Stm32BridgeManager::GetInstance().Start(uart_bus);
 
     // Set network event callback for UI updates and network state handling
     board.SetNetworkEventCallback([this](NetworkEvent event, const std::string& data) {
@@ -287,7 +297,12 @@ void Application::HandleNetworkConnectedEvent() {
     ESP_LOGI(TAG, "Network connected");
     auto state = GetDeviceState();
 
-    if (state == kDeviceStateStarting || state == kDeviceStateWifiConfiguring) {
+    if (state == kDeviceStateStarting || state == kDeviceStateWifiConfiguring ||
+        state == kDeviceStateNetworkConnecting || state == kDeviceStateOffline) {
+        if (state == kDeviceStateOffline || state == kDeviceStateWifiConfiguring ||
+            state == kDeviceStateStarting) {
+            SetDeviceState(kDeviceStateNetworkConnecting);
+        }
         // Network is ready, start activation
         SetDeviceState(kDeviceStateActivating);
         if (activation_task_handle_ != nullptr) {
@@ -313,6 +328,9 @@ void Application::HandleNetworkConnectedEvent() {
 void Application::HandleNetworkDisconnectedEvent() {
     // Close current conversation when network disconnected
     auto state = GetDeviceState();
+    if (state != kDeviceStateOffline) {
+        SetDeviceState(kDeviceStateOffline);
+    }
     if (state == kDeviceStateNotifying) {
         StopNotification();
     }
@@ -524,6 +542,10 @@ void Application::InitializeProtocol() {
 
     display->SetStatus(Lang::Strings::LOADING_PROTOCOL);
 
+    // === FORCE WEBSOCKET CHO TEST 3 (MOCK SERVER TRÊN LAPTOP) ===
+    protocol_ = std::make_unique<WebsocketProtocol>();
+    ESP_LOGW(TAG, ">>> [TEST 3] FORCED WebsocketProtocol! Bypassing MQTT config <<<");
+    /*
     if (ota_->HasMqttConfig()) {
         protocol_ = std::make_unique<MqttProtocol>();
     } else if (ota_->HasWebsocketConfig()) {
@@ -532,6 +554,7 @@ void Application::InitializeProtocol() {
         ESP_LOGW(TAG, "No protocol specified in the OTA config, using MQTT");
         protocol_ = std::make_unique<MqttProtocol>();
     }
+    */
 
     protocol_->OnConnected([this]() { DismissAlert(); });
 
@@ -991,6 +1014,7 @@ void Application::HandleStateChangedEvent() {
     switch (new_state) {
         case kDeviceStateUnknown:
         case kDeviceStateIdle:
+        case kDeviceStateOnlineIdle:
             display->SetStatus(Lang::Strings::STANDBY);
             display->ClearChatMessages();    // Clear messages first
             display->SetEmotion("neutral");  // Then set emotion (wechat mode checks child count)
@@ -1039,6 +1063,30 @@ void Application::HandleStateChangedEvent() {
         case kDeviceStateWifiConfiguring:
             audio_service_.EnableVoiceProcessing(false);
             audio_service_.EnableWakeWordDetection(false);
+            break;
+        case kDeviceStateNetworkConnecting:
+            display->SetStatus(Lang::Strings::CONNECTING);
+            break;
+        case kDeviceStateOffline:
+            display->SetStatus("Offline");
+            audio_service_.EnableVoiceProcessing(false);
+            audio_service_.EnableWakeWordDetection(true);
+            break;
+        case kDeviceStateDataFetch:
+        case kDeviceStateAiInteraction:
+            break;
+        case kDeviceStateCommandExec:
+            display->SetStatus("Executing command");
+            break;
+        case kDeviceStateFirmwareOta:
+        case kDeviceStateUpgrading:
+            display->SetStatus(Lang::Strings::UPGRADING);
+            break;
+        case kDeviceStateStm32Recovery:
+            display->SetStatus("STM32 recovery");
+            break;
+        case kDeviceStatePowerDown:
+            display->SetStatus("Power down");
             break;
         default:
             // Do nothing

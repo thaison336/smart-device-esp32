@@ -34,6 +34,16 @@ set(SOURCES "audio/audio_codec.cc"
             "protocols/mqtt_protocol.cc"
             "protocols/websocket_protocol.cc"
             "mcp_server.cc"
+            "stm32_bridge/nanopb/pb_common.c"
+            "stm32_bridge/nanopb/pb_encode.c"
+            "stm32_bridge/nanopb/pb_decode.c"
+            "stm32_bridge/proto/datalogger.pb.c"
+            "stm32_bridge/transport/stream_framer.cc"
+            "stm32_bridge/transport/mock_bus.cc"
+            "stm32_bridge/transport/uart_bus.cc"
+            "stm32_bridge/stm32_bridge_manager.cc"
+            "stm32_bridge/stm32_mcp_tools.cc"
+            "stm32_bridge/stm32_dashboard_ui.cc"
             "system_info.cc"
             "application.cc"
             "ota.cc"
@@ -43,7 +53,7 @@ set(SOURCES "audio/audio_codec.cc"
             "main.cc"
             )
 
-set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols")
+set(INCLUDE_DIRS "." "display" "display/lvgl_display" "display/lvgl_display/jpg" "audio" "audio/demuxer" "protocols" "stm32_bridge" "stm32_bridge/nanopb" "stm32_bridge/proto" "stm32_bridge/transport")
 
 # Add board common files
 list(APPEND SOURCES
@@ -1071,6 +1081,7 @@ idf_component_register(SRCS ${SOURCES}
                         esp_eth
                         esp_driver_gpio
                         esp_driver_uart
+                        esp_driver_usb_serial_jtag
                         esp_driver_spi
                         esp_driver_i2c
                         esp_driver_i2s
