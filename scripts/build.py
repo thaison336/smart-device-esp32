@@ -55,7 +55,10 @@ def get_project_version() -> Optional[str]:
 
 
 def _run_idf(*args: str, preview: bool = False) -> None:
-    command = ["idf.py"]
+    if os.name == "nt":
+        command = [sys.executable, str(Path(os.environ.get("IDF_PATH", "")) / "tools" / "idf.py")]
+    else:
+        command = ["idf.py"]
     if preview:
         command.append("--preview")
     command.extend(args)
