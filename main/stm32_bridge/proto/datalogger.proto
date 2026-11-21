@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package datalogger;
+
+enum MessageType {
+    MSG_TYPE_UNSPECIFIED = 0;
+    MSG_TYPE_HANDSHAKE = 1;
+    MSG_TYPE_HEARTBEAT = 2;
+    MSG_TYPE_TELEMETRY = 3;
+    MSG_TYPE_COMMAND = 4;
+    MSG_TYPE_ACK = 5;
+    MSG_TYPE_STATUS = 6;
+}
+
+enum StatusCode {
+    STATUS_OK = 0;
+    STATUS_BUSY = 1;
+    STATUS_INVALID = 2;
+    STATUS_UNSUPPORTED = 3;
+    STATUS_TIMEOUT = 4;
+    STATUS_INTERNAL = 5;
+    STATUS_SAFETY_LOCK = 6;
+}
+
+enum AckStatus {
+    ACK_STATUS_OK = 0;
+    ACK_STATUS_APPLIED = 1;
+    ACK_STATUS_BUSY = 2;
+    ACK_STATUS_INVALID = 3;
+    ACK_STATUS_TIMEOUT = 4;
+    ACK_STATUS_INTERNAL = 5;
+}
+
+message Handshake {
+    uint32 protocol_version = 1;
+    uint32 hardware_version = 2;
+    uint32 firmware_version = 3;
+    string device_serial = 4;
+}
+
+message Heartbeat {
+    uint32 uptime_sec = 1;
+    uint32 free_heap = 2;
+    uint32 status_flags = 3;
+}
+
+message SensorTelemetry {
+    float temperature = 1;
+    float humidity = 2;
+    float pressure = 3;
+    float battery_voltage = 4;
+    float current_mA = 5;
+    uint32 digital_inputs = 6;
+    repeated float analog_channels = 7;
+    string error_message = 8;
+}
+
+message ControlCommand {
+    uint32 command_id = 1;
+    string action = 2;
+    int32 param_int = 3;
+    float param_float = 4;
+    string param_str = 5;
+}
+
+message CommandAck {
+    uint32 command_seq = 1;
+    AckStatus status = 2;
+    int32 result_code = 3;
+    string result_msg = 4;
+}
+
+message BridgeEnvelope {
+    uint32 protocol_version = 1;
+    uint32 session_id = 2;
+    MessageType msg_type = 3;
+    uint32 sequence_id = 4;
+    uint64 timestamp_ms = 5;
+    string source_id = 6;
+
+    oneof payload {
+        Handshake handshake = 10;
+        Heartbeat heartbeat = 11;
+        SensorTelemetry telemetry = 12;
+        ControlCommand command = 13;
+        CommandAck ack = 14;
+    }
+}

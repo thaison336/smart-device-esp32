@@ -1,0 +1,7 @@
+datalogger.Handshake.device_serial max_size:32
+datalogger.SensorTelemetry.error_message max_size:32
+datalogger.SensorTelemetry.analog_channels max_count:4
+datalogger.ControlCommand.action max_size:32
+datalogger.ControlCommand.param_str max_size:32
+datalogger.CommandAck.result_msg max_size:32
+datalogger.BridgeEnvelope.source_id max_size:16
