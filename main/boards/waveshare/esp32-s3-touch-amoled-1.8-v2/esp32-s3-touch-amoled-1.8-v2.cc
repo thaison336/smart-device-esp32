@@ -25,6 +25,8 @@
 #include <esp_lcd_touch_cst816s.h>
 #include <esp_lvgl_port.h>
 #include <lvgl.h>
+#include <cstdint>
+#include "stm32_bridge/stm32_dashboard_ui.h"
 
 #define TAG "WaveshareEsp32s3TouchAMOLED1inch8"
 
@@ -103,6 +105,9 @@ static const co5300_lcd_init_cmd_t vendor_specific_init[] = {
 // 在waveshare_amoled_1_8类之前添加新的显示类
 class CustomLcdDisplay : public SpiLcdDisplay {
 public:
+    lv_obj_t* dashboard_ = nullptr;
+    lv_obj_t* dashboard_status_ = nullptr;
+
     CustomLcdDisplay(esp_lcd_panel_io_handle_t io_handle,
                     esp_lcd_panel_handle_t panel_handle,
                     int width,
@@ -125,6 +130,131 @@ public:
         DisplayLockGuard lock(this);
         lv_obj_set_style_pad_left(status_bar_, LV_HOR_RES * 0.1, 0);
         lv_obj_set_style_pad_right(status_bar_, LV_HOR_RES * 0.1, 0);
+
+        auto screen = lv_screen_active();
+
+        // Khởi tạo Stm32DashboardUI trượt 3 trang cảm ứng
+        Stm32DashboardUI::Setup(screen);
+
+        dashboard_ = lv_obj_create(screen);
+        lv_obj_set_size(dashboard_, LV_HOR_RES, LV_VER_RES);
+        lv_obj_set_pos(dashboard_, 0, 0);
+        lv_obj_set_style_radius(dashboard_, 0, 0);
+        lv_obj_set_style_border_width(dashboard_, 0, 0);
+        lv_obj_set_style_pad_all(dashboard_, 12, 0);
+        lv_obj_set_style_bg_color(dashboard_, lv_color_hex(0x101820), 0);
+        lv_obj_set_flex_flow(dashboard_, LV_FLEX_FLOW_COLUMN);
+        lv_obj_set_flex_align(dashboard_, LV_FLEX_ALIGN_START,
+                              LV_FLEX_ALIGN_CENTER,
+                              LV_FLEX_ALIGN_CENTER);
+        lv_obj_add_flag(dashboard_, LV_OBJ_FLAG_HIDDEN);
+
+        auto title = lv_label_create(dashboard_);
+        lv_label_set_text(title, "Smart Device");
+        lv_obj_set_style_text_color(title, lv_color_white(), 0);
+
+        dashboard_status_ = lv_label_create(dashboard_);
+        lv_label_set_text(dashboard_status_, "Waiting for network...");
+        lv_obj_set_style_text_align(dashboard_status_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(dashboard_status_, lv_color_hex(0xA8C7FA), 0);
+
+        auto grid = lv_obj_create(dashboard_);
+        lv_obj_set_size(grid, LV_HOR_RES - 24, LV_VER_RES - 112);
+        lv_obj_set_style_radius(grid, 12, 0);
+        lv_obj_set_style_border_width(grid, 0, 0);
+        lv_obj_set_style_bg_opa(grid, LV_OPA_TRANSP, 0);
+        lv_obj_set_style_pad_all(grid, 6, 0);
+        lv_obj_set_flex_flow(grid, LV_FLEX_FLOW_ROW_WRAP);
+        lv_obj_set_flex_align(grid, LV_FLEX_ALIGN_SPACE_EVENLY,
+                              LV_FLEX_ALIGN_SPACE_EVENLY,
+                              LV_FLEX_ALIGN_SPACE_EVENLY);
+
+        const char* labels[] = {"Chat", "AI", "Sensors", "OTA", "Settings", "Fault"};
+        for (int i = 0; i < 6; ++i) {
+            auto card = lv_obj_create(grid);
+            lv_obj_set_size(card, 150, 120);
+            lv_obj_set_style_radius(card, 16, 0);
+            lv_obj_set_style_border_width(card, 1, 0);
+            lv_obj_set_style_border_color(card, lv_color_hex(0x3A4A5A), 0);
+            lv_obj_set_style_bg_color(card, lv_color_hex(0x1E2A35), 0);
+            lv_obj_add_flag(card, LV_OBJ_FLAG_CLICKABLE);
+            lv_obj_add_event_cb(card, DashboardCardClicked, LV_EVENT_CLICKED, this);
+            lv_obj_set_user_data(card, reinterpret_cast<void*>(static_cast<intptr_t>(i)));
+
+            auto label = lv_label_create(card);
+            lv_label_set_text(label, labels[i]);
+            lv_obj_set_style_text_color(label, lv_color_white(), 0);
+            lv_obj_center(label);
+        }
+
+        auto menu = lv_obj_create(screen);
+        lv_obj_set_size(menu, 72, 36);
+        lv_obj_align(menu, LV_ALIGN_BOTTOM_RIGHT, -8, -8);
+        lv_obj_set_style_radius(menu, 18, 0);
+        lv_obj_set_style_border_width(menu, 0, 0);
+        lv_obj_set_style_bg_color(menu, lv_color_hex(0x2463EB), 0);
+        lv_obj_add_flag(menu, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_event_cb(menu, DashboardMenuClicked, LV_EVENT_CLICKED, this);
+
+        auto menu_label = lv_label_create(menu);
+        lv_label_set_text(menu_label, "Menu");
+        lv_obj_set_style_text_color(menu_label, lv_color_white(), 0);
+        lv_obj_center(menu_label);
+    }
+
+    static void DashboardMenuClicked(lv_event_t* event) {
+        auto* display = static_cast<CustomLcdDisplay*>(lv_event_get_user_data(event));
+        if (display->dashboard_ == nullptr) {
+            return;
+        }
+
+        if (lv_obj_has_flag(display->dashboard_, LV_OBJ_FLAG_HIDDEN)) {
+            lv_label_set_text(display->dashboard_status_,
+                              Application::GetInstance().GetDeviceState() ==
+                                      kDeviceStateOffline
+                                  ? "Offline mode"
+                                  : "System online");
+            lv_obj_remove_flag(display->dashboard_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(display->dashboard_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
+    static void DashboardCardClicked(lv_event_t* event) {
+        auto* display = static_cast<CustomLcdDisplay*>(lv_event_get_user_data(event));
+        auto* card = static_cast<lv_obj_t*>(lv_event_get_target(event));
+        int index = static_cast<int>(reinterpret_cast<intptr_t>(lv_obj_get_user_data(card)));
+        auto& app = Application::GetInstance();
+
+        switch (index) {
+            case 0:
+                lv_obj_add_flag(display->dashboard_, LV_OBJ_FLAG_HIDDEN);
+                break;
+            case 1:
+                lv_obj_add_flag(display->dashboard_, LV_OBJ_FLAG_HIDDEN);
+                app.ToggleChatState();
+                break;
+            case 2:
+                lv_label_set_text(display->dashboard_status_,
+                                  "Sensors: waiting for STM32 data");
+                break;
+            case 3:
+                lv_label_set_text(display->dashboard_status_,
+                                  "OTA: managed by server");
+                break;
+            case 4:
+                lv_label_set_text(display->dashboard_status_,
+                                  "Wi-Fi, audio and power settings");
+                break;
+            case 5:
+                lv_label_set_text(display->dashboard_status_,
+                                  app.GetDeviceState() == kDeviceStateOffline
+                                      ? "Fault: offline - reconnecting"
+                                      : "Fault: checking STM32");
+                break;
+            default:
+                break;
+        }
     }
 };
 
