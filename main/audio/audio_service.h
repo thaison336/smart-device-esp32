@@ -38,7 +38,8 @@
 
 #define OPUS_FRAME_DURATION_MS 60
 #define MAX_ENCODE_TASKS_IN_QUEUE 2
-#define MAX_PLAYBACK_TASKS_IN_QUEUE 2
+#define MAX_PLAYBACK_TASKS_IN_QUEUE 6
+#define AUDIO_JITTER_PREROLL_FRAMES 3
 #define MAX_DECODE_PACKETS_IN_QUEUE (1200 / OPUS_FRAME_DURATION_MS)
 #define MAX_SEND_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)
 #define AUDIO_TESTING_MAX_DURATION_MS 10000
@@ -180,6 +181,7 @@ private:
     std::deque<std::unique_ptr<AudioTask>> audio_playback_queue_;
     bool decode_in_flight_ = false;
     bool output_in_flight_ = false;
+    bool is_buffering_ = true;
     bool playback_drained_notified_ = true;
     uint32_t playback_generation_ = 0;
     // For server AEC

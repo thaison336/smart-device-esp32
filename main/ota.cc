@@ -162,6 +162,8 @@ esp_err_t Ota::CheckVersion() {
         has_mqtt_config_ = true;
     } else {
         ESP_LOGI(TAG, "No mqtt section found !");
+        Settings settings("mqtt", true);
+        settings.EraseAll();
     }
 
     has_websocket_config_ = false;
@@ -183,6 +185,8 @@ esp_err_t Ota::CheckVersion() {
         has_websocket_config_ = true;
     } else {
         ESP_LOGI(TAG, "No websocket section found!");
+        Settings settings("websocket", true);
+        settings.EraseAll();
     }
 
     has_server_time_ = false;

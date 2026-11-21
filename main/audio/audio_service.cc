@@ -175,6 +175,7 @@ void AudioService::Stop() {
     {
         std::lock_guard<std::mutex> lock(audio_queue_mutex_);
         ++playback_generation_;
+        is_buffering_ = true;
         audio_encode_queue_.clear();
         audio_decode_queue_.clear();
         audio_playback_queue_.clear();
@@ -228,6 +229,14 @@ bool AudioService::ReadAudioData(std::vector<int16_t>& data, int sample_rate, in
         audio_debugger_ = std::make_unique<AudioDebugger>();
     }
     audio_debugger_->Feed(data);
+#endif
+
+#if CONFIG_AUDIO_SERIAL_STREAM
+    // Stream raw PCM over Serial Type-C with magic header: 0xA5, 0x5A, length (uint16_t)
+    uint8_t header[4] = {0xA5, 0x5A, (uint8_t)((data.size() * sizeof(int16_t)) & 0xFF), (uint8_t)(((data.size() * sizeof(int16_t)) >> 8) & 0xFF)};
+    fwrite(header, 1, sizeof(header), stdout);
+    fwrite(data.data(), sizeof(int16_t), data.size(), stdout);
+    fflush(stdout);
 #endif
 
     return true;
@@ -315,7 +324,23 @@ void AudioService::AudioOutputTask() {
     while (true) {
         std::unique_lock<std::mutex> lock(audio_queue_mutex_);
         audio_queue_cv_.wait(lock, [this]() {
-            return !audio_playback_queue_.empty() || service_stopped_.load();
+            if (service_stopped_.load()) {
+                return true;
+            }
+            if (audio_playback_queue_.empty()) {
+                return false;
+            }
+            // Jitter Buffer Pre-roll: Wait until we have enough buffered frames
+            // or until the stream has finished decoding (decode queue drained)
+            if (is_buffering_) {
+                if (audio_playback_queue_.size() >= AUDIO_JITTER_PREROLL_FRAMES ||
+                    (audio_decode_queue_.empty() && !decode_in_flight_)) {
+                    is_buffering_ = false;
+                    return true;
+                }
+                return false;
+            }
+            return true;
         });
         if (service_stopped_.load()) {
             break;
@@ -323,6 +348,11 @@ void AudioService::AudioOutputTask() {
 
         auto task = std::move(audio_playback_queue_.front());
         audio_playback_queue_.pop_front();
+        if (audio_playback_queue_.empty() && !decode_in_flight_) {
+            is_buffering_ = true;
+            ESP_LOGW(TAG, "[DIAGNOSTIC] Buffer Underrun! Playback queue empty (decode_q=%u), re-entering buffering!",
+                     (unsigned)audio_decode_queue_.size());
+        }
         output_in_flight_ = true;
         audio_queue_cv_.notify_all();
         lock.unlock();
@@ -594,6 +624,8 @@ bool AudioService::PushPacketToDecodeQueue(std::unique_ptr<AudioStreamPacket> pa
                        audio_decode_queue_.size() < MAX_DECODE_PACKETS_IN_QUEUE;
             });
         } else {
+            ESP_LOGE(TAG, "[DIAGNOSTIC] Decode Queue FULL (%u packets)! Dropping audio packet!",
+                     (unsigned)audio_decode_queue_.size());
             return false;
         }
     }
@@ -778,6 +810,7 @@ void AudioService::ResetDecoder() {
     {
         std::lock_guard<std::mutex> lock(audio_queue_mutex_);
         ++playback_generation_;
+        is_buffering_ = true;
         std::unique_lock<std::mutex> decoder_lock(decoder_mutex_);
         if (opus_decoder_ != nullptr) {
             esp_opus_dec_reset(opus_decoder_);

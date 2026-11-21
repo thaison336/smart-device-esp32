@@ -19,6 +19,15 @@ static const char* const STATE_STRINGS[] = {
     "activating",
     "audio_testing",
     "fatal_error",
+    "network_connecting",
+    "online_idle",
+    "data_fetch",
+    "ai_interaction",
+    "command_exec",
+    "firmware_ota",
+    "offline",
+    "stm32_recovery",
+    "power_down",
     "invalid_state"
 };
 
@@ -26,10 +35,10 @@ DeviceStateMachine::DeviceStateMachine() {
 }
 
 const char* DeviceStateMachine::GetStateName(DeviceState state) {
-    if (state >= 0 && state <= kDeviceStateFatalError) {
+    if (state >= 0 && state <= kDeviceStatePowerDown) {
         return STATE_STRINGS[state];
     }
-    return STATE_STRINGS[kDeviceStateFatalError + 1];
+    return STATE_STRINGS[kDeviceStatePowerDown + 1];
 }
 
 bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) const {
@@ -47,12 +56,18 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
         case kDeviceStateStarting:
             // Can go to wifi configuring or activating
             return to == kDeviceStateWifiConfiguring ||
-                   to == kDeviceStateActivating;
+                   to == kDeviceStateActivating ||
+                   to == kDeviceStateNetworkConnecting ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStateStm32Recovery ||
+                   to == kDeviceStateFatalError;
 
         case kDeviceStateWifiConfiguring:
             // Can go to activating (after wifi connected) or audio testing
             return to == kDeviceStateActivating ||
-                   to == kDeviceStateAudioTesting;
+                   to == kDeviceStateAudioTesting ||
+                   to == kDeviceStateNetworkConnecting ||
+                   to == kDeviceStateOffline;
 
         case kDeviceStateAudioTesting:
             // Can go back to wifi configuring
@@ -62,7 +77,9 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
             // Can go to upgrading, idle, or back to wifi configuring (on error)
             return to == kDeviceStateUpgrading ||
                    to == kDeviceStateIdle ||
-                   to == kDeviceStateWifiConfiguring;
+                   to == kDeviceStateWifiConfiguring ||
+                   to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateOffline;
 
         case kDeviceStateUpgrading:
             // Can go to idle (upgrade failed) or activating
@@ -77,7 +94,15 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
                    to == kDeviceStateNotifying ||
                    to == kDeviceStateActivating ||
                    to == kDeviceStateUpgrading ||
-                   to == kDeviceStateWifiConfiguring;
+                   to == kDeviceStateWifiConfiguring ||
+                   to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateDataFetch ||
+                   to == kDeviceStateAiInteraction ||
+                   to == kDeviceStateCommandExec ||
+                   to == kDeviceStateFirmwareOta ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStateStm32Recovery ||
+                   to == kDeviceStatePowerDown;
 
         case kDeviceStateConnecting:
             // Can go to idle (failed) or listening (success)
@@ -100,6 +125,48 @@ bool DeviceStateMachine::IsValidTransition(DeviceState from, DeviceState to) con
         case kDeviceStateFatalError:
             // Cannot transition out of fatal error
             return false;
+
+        case kDeviceStateNetworkConnecting:
+            return to == kDeviceStateActivating ||
+                   to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStatePowerDown;
+
+        case kDeviceStateOnlineIdle:
+            return to == kDeviceStateIdle ||
+                   to == kDeviceStateDataFetch ||
+                   to == kDeviceStateAiInteraction ||
+                   to == kDeviceStateCommandExec ||
+                   to == kDeviceStateFirmwareOta ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStateStm32Recovery ||
+                   to == kDeviceStatePowerDown;
+
+        case kDeviceStateDataFetch:
+        case kDeviceStateAiInteraction:
+        case kDeviceStateCommandExec:
+        case kDeviceStateFirmwareOta:
+            return to == kDeviceStateIdle ||
+                   to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStateStm32Recovery ||
+                   to == kDeviceStatePowerDown;
+
+        case kDeviceStateOffline:
+            return to == kDeviceStateNetworkConnecting ||
+                   to == kDeviceStateActivating ||
+                   to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateStm32Recovery ||
+                   to == kDeviceStatePowerDown;
+
+        case kDeviceStateStm32Recovery:
+            return to == kDeviceStateOnlineIdle ||
+                   to == kDeviceStateIdle ||
+                   to == kDeviceStateOffline ||
+                   to == kDeviceStatePowerDown;
+
+        case kDeviceStatePowerDown:
+            return to == kDeviceStateStarting;
 
         default:
             return false;

@@ -85,6 +85,15 @@ bool WebsocketProtocol::OpenAudioChannel() {
         version_ = version;
     }
 
+    // === HARDCODE CHO TEST 3: MOCK WEBSOCKET SERVER TRÊN LAPTOP ===
+    // Đổi IP ở dưới nếu ESP32 kết nối Wi-Fi dải khác (ví dụ: 192.168.4.2)
+    #define MOCK_WS_SERVER_IP "192.168.1.8"
+    #define MOCK_WS_SERVER_PORT "8000"
+    url = "ws://" MOCK_WS_SERVER_IP ":" MOCK_WS_SERVER_PORT "/";
+    version_ = 2; // Protocol v2 khớp với mock_jitter_ws_server.py
+    ESP_LOGW(TAG, ">>> [TEST 3] MOCK WS URL FORCED: %s (v%d) <<<", url.c_str(), version_);
+    // ==============================================================
+
     error_occurred_ = false;
 
     auto network = Board::GetInstance().GetNetwork();
@@ -109,11 +118,20 @@ bool WebsocketProtocol::OpenAudioChannel() {
         if (binary) {
             if (on_incoming_audio_ != nullptr) {
                 if (version_ == 2) {
+                    if (len < sizeof(BinaryProtocol2)) {
+                        ESP_LOGW(TAG, "Discarding short protocol 2 audio frame: len=%u", len);
+                        return;
+                    }
                     BinaryProtocol2* bp2 = (BinaryProtocol2*)data;
                     bp2->version = ntohs(bp2->version);
                     bp2->type = ntohs(bp2->type);
                     bp2->timestamp = ntohl(bp2->timestamp);
                     bp2->payload_size = ntohl(bp2->payload_size);
+                    if (bp2->payload_size > len - sizeof(BinaryProtocol2)) {
+                        ESP_LOGW(TAG, "Discarding invalid protocol 2 frame: len=%u payload_size=%lu",
+                                 len, (unsigned long)bp2->payload_size);
+                        return;
+                    }
                     auto payload = (uint8_t*)bp2->payload;
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
@@ -121,9 +139,18 @@ bool WebsocketProtocol::OpenAudioChannel() {
                         .timestamp = bp2->timestamp,
                         .payload = std::vector<uint8_t>(payload, payload + bp2->payload_size)}));
                 } else if (version_ == 3) {
+                    if (len < sizeof(BinaryProtocol3)) {
+                        ESP_LOGW(TAG, "Discarding short protocol 3 audio frame: len=%u", len);
+                        return;
+                    }
                     BinaryProtocol3* bp3 = (BinaryProtocol3*)data;
                     bp3->type = bp3->type;
                     bp3->payload_size = ntohs(bp3->payload_size);
+                    if (bp3->payload_size > len - sizeof(BinaryProtocol3)) {
+                        ESP_LOGW(TAG, "Discarding invalid protocol 3 frame: len=%u payload_size=%u",
+                                 len, bp3->payload_size);
+                        return;
+                    }
                     auto payload = (uint8_t*)bp3->payload;
                     on_incoming_audio_(std::make_unique<AudioStreamPacket>(AudioStreamPacket{
                         .sample_rate = server_sample_rate_,
